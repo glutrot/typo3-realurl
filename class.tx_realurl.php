@@ -218,15 +218,19 @@ class tx_realurl {
 		if (!$params['TCEmainHook']) {
 			// Return directly, if simulateStaticDocuments is set
 			if ($GLOBALS['TSFE']->config['config']['simulateStaticDocuments']) {
-				/** @noinspection PhpUndefinedMethodInspection */
-				$GLOBALS['TT']->setTSlogMessage('SimulateStaticDocuments is enabled. RealURL disables itself.', 2);
+				if (method_exists($GLOBALS['TT'], 'setTSlogMessage')) {
+					/** @noinspection PhpUndefinedMethodInspection */
+					$GLOBALS['TT']->setTSlogMessage('SimulateStaticDocuments is enabled. RealURL disables itself.', 2);
+				}
 				return;
 			}
 
 			// Return directly, if realurl is not enabled
 			if (!$GLOBALS['TSFE']->config['config']['tx_realurl_enable']) {
-				/** @noinspection PhpUndefinedMethodInspection */
-				$GLOBALS['TT']->setTSlogMessage('RealURL is not enabled in TS setup. Finished.');
+				if (method_exists($GLOBALS['TT'], 'setTSlogMessage')) {
+					/** @noinspection PhpUndefinedMethodInspection */
+					$GLOBALS['TT']->setTSlogMessage('RealURL is not enabled in TS setup. Finished.');
+				}
 				return;
 			}
 		}
@@ -969,8 +973,10 @@ class tx_realurl {
 				// respectSimulateStaticURLs and defaultToHTMLsuffixOnPrev are set, than
 				// ignore respectSimulateStaticURLs and attempt to resolve page id.
 				// See http://bugs.typo3.org/view.php?id=1530
-				/** @noinspection PhpUndefinedMethodInspection */
-				$GLOBALS['TT']->setTSlogMessage('decodeSpURL: ignoring respectSimulateStaticURLs due defaultToHTMLsuffixOnPrev for the root level page!)', 2);
+				if (method_exists($GLOBALS['TT'], 'setTSlogMessage')) {
+					/** @noinspection PhpUndefinedMethodInspection */
+					$GLOBALS['TT']->setTSlogMessage('decodeSpURL: ignoring respectSimulateStaticURLs due defaultToHTMLsuffixOnPrev for the root level page!)', 2);
+				}
 				$this->extConf['init']['respectSimulateStaticURLs'] = false;
 			}
 			if (!$this->extConf['init']['respectSimulateStaticURLs'] || $fI['path']) {
@@ -2518,8 +2524,10 @@ class tx_realurl {
 		if (preg_match('/^(1|0|true|false)$/i', $str)) {
 			$logMessage = sprintf('Wrong boolean value for parameter "%s": "%s". It is a string, not a boolean!', $paramName, $str);
 			$this->devLog($logMessage);
-			/** @noinspection PhpUndefinedMethodInspection */
-			$GLOBALS['TT']->setTSlogMessage($logMessage, 2);
+			if (method_exists($GLOBALS['TT'], 'setTSlogMessage')) {
+				/** @noinspection PhpUndefinedMethodInspection */
+				$GLOBALS['TT']->setTSlogMessage($logMessage, 2);
+			}
 			if ($str == intval($str)) {
 				$str = intval($str);
 			} else {
@@ -2618,8 +2626,10 @@ class tx_realurl {
 					'Please, fix your RealURL configuration!');
 			}
 
-			/** @noinspection PhpUndefinedMethodInspection */
-			$GLOBALS['TT']->setTSlogMessage('RealURL warning: rootpage_id was not configured!');
+			if (method_exists($GLOBALS['TT'], 'setTSlogMessage')) {
+				/** @noinspection PhpUndefinedMethodInspection */
+				$GLOBALS['TT']->setTSlogMessage('RealURL warning: rootpage_id was not configured!');
+			}
 
 			$this->extConf['pagePath']['rootpage_id'] = $this->findRootPageId();
 
