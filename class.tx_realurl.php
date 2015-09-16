@@ -2007,16 +2007,17 @@ class tx_realurl {
 	 * @param array $cfg Configuration array
 	 * @param string $aliasValue Alias value to convert to ID
 	 * @param boolean $onlyNonExpired <code>true</code> if only non-expiring record should be looked up
+	 * @param boolean $performCacheMissResolution Allow cache miss resolution to be performed if no matching entry exists in unique alias table?
 	 * @return int ID integer. If none is found: false
 	 * @see lookUpTranslation(), lookUp_idToUniqAlias(), lookUp_uniqAliasToId_fetchRow, lookup_uniqAliasToId_missResolution_fetchPagesAndRetry
 	 */
-	protected function lookUp_uniqAliasToId($cfg, $aliasValue, $onlyNonExpired = FALSE) {
+	protected function lookUp_uniqAliasToId($cfg, $aliasValue, $onlyNonExpired = FALSE, $performCacheMissResolution = TRUE) {
 		// try to find in unique cache
 		$row = $this->lookUp_uniqAliasToId_fetchRow($cfg, $aliasValue, $onlyNonExpired);
 
 		// handle cache miss
 		$isCacheMiss = !is_array($row);
-		if ($isCacheMiss && isset($cfg['useUniqueCache_conf']['cacheMissResolution'])) {
+		if ($performCacheMissResolution && $isCacheMiss && isset($cfg['useUniqueCache_conf']['cacheMissResolution'])) {
 			$strategy = isset($cfg['useUniqueCache_conf']['cacheMissResolution']['strategy']) ? trim($cfg['useUniqueCache_conf']['cacheMissResolution']['strategy']) : '';
 
 			if ($strategy == 'fetchPagesAndRetry') {
@@ -2153,7 +2154,7 @@ class tx_realurl {
 		while ($counter < $maxTry) {
 
 			// If the test-alias did NOT exist, it must be unique and we break out
-			$foundId = $this->lookUp_uniqAliasToId($cfg, $test_newAliasValue, true);
+			$foundId = $this->lookUp_uniqAliasToId($cfg, $test_newAliasValue, true, false);
 			if (!$foundId || $foundId == $idValue) {
 				$uniqueAlias = $test_newAliasValue;
 				break;
