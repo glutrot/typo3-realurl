@@ -34,6 +34,8 @@
  * @author	Dmitry Dulepov <dmitry@typo3.org>
  */
 
+use TYPO3\CMS\Core\Utility\GeneralUtility;
+
 /**
  * Class for creating and parsing Speaking Urls
  * This class interfaces with hooks in TYPO3 inside tslib_fe (for parsing speaking URLs to GET parameters) and in t3lib_tstemplate (for parsing GET parameters into a speaking URL)
@@ -1981,10 +1983,10 @@ class tx_realurl {
 	 * @param array $cfg Configuration array
 	 * @param string $aliasValue Alias value to convert to ID
 	 * @param boolean $onlyNonExpired <code>true</code> if only non-expiring record should be looked up
-	 * @return int ID integer. If none is found: false
+	 * @return mixed first result row from database if found
 	 * @see lookUpTranslation(), lookUp_idToUniqAlias()
 	 */
-	protected function lookUp_uniqAliasToId($cfg, $aliasValue, $onlyNonExpired = FALSE) {
+	protected function lookUp_uniqAliasToId_fetchRow($cfg, $aliasValue, $onlyNonExpired = FALSE) {
 		/** @noinspection PhpUndefinedMethodInspection */
 		list($row) = $GLOBALS['TYPO3_DB']->exec_SELECTgetRows('value_id', 'tx_realurl_uniqalias',
 				'value_alias=' . $GLOBALS['TYPO3_DB']->fullQuoteStr($aliasValue, 'tx_realurl_uniqalias') .
@@ -1992,7 +1994,103 @@ class tx_realurl {
 				' AND field_id=' . $GLOBALS['TYPO3_DB']->fullQuoteStr($cfg['id_field'], 'tx_realurl_uniqalias') .
 				' AND tablename=' . $GLOBALS['TYPO3_DB']->fullQuoteStr($cfg['table'], 'tx_realurl_uniqalias') .
 				' AND ' . ($onlyNonExpired ? 'expire=0' : '(expire=0 OR expire>' . time() . ')'));
+
+		return $row;
+	}
+
+	/**
+	 * Looks up an ID value (integer) in lookup-table based on input alias value.
+	 * (The lookup table for id<->alias is meant to contain UNIQUE alias strings for id integers)
+	 * In the lookup table 'tx_realurl_uniqalias' the field "value_alias" should be unique (per combination of field_alias+field_id+tablename)! However the "value_id" field doesn't have to; that is a feature which allows more aliases to point to the same id. The alias selected for converting id to alias will be the first inserted at the moment. This might be more intelligent in the future, having an order column which can be controlled from the backend for instance!
+	 * If no matching cache entry is found, that cache miss will be tried to be resolved as configured.
+	 *
+	 * @param array $cfg Configuration array
+	 * @param string $aliasValue Alias value to convert to ID
+	 * @param boolean $onlyNonExpired <code>true</code> if only non-expiring record should be looked up
+	 * @return int ID integer. If none is found: false
+	 * @see lookUpTranslation(), lookUp_idToUniqAlias(), lookUp_uniqAliasToId_fetchRow, lookup_uniqAliasToId_missResolution_fetchPagesAndRetry
+	 */
+	protected function lookUp_uniqAliasToId($cfg, $aliasValue, $onlyNonExpired = FALSE) {
+		// try to find in unique cache
+		$row = $this->lookUp_uniqAliasToId_fetchRow($cfg, $aliasValue, $onlyNonExpired);
+
+		// handle cache miss
+		$isCacheMiss = !is_array($row);
+		if ($isCacheMiss && isset($cfg['useUniqueCache_conf']['cacheMissResolution'])) {
+			$strategy = isset($cfg['useUniqueCache_conf']['cacheMissResolution']['strategy']) ? trim($cfg['useUniqueCache_conf']['cacheMissResolution']['strategy']) : '';
+
+			if ($strategy == 'fetchPagesAndRetry') {
+				$row = $this->lookup_uniqAliasToId_missResolution_fetchPagesAndRetry($cfg, $aliasValue, $onlyNonExpired);
+			}
+		}
+
 		return (is_array($row) ? $row['value_id'] : false);
+	}
+
+	/**
+	 * Attempts to resolve a miss situation on unique cache by fetching configured
+	 * URLs which should populate the unique cache again. In order to allow the
+	 * called pages to populate the unique cache, encoding caches for the pages
+	 * which are supposed to apply the unique aliases need to be cleared. To
+	 * achieve this, the sub-array clearPageCache of strategy_conf will be
+	 * passed to clearPageCacheMgm if configured.
+	 * The URLs to be fetched (configured as sub-array urls of strategy_conf)
+	 * are only supposed to populate the cache, e.g. for tt_news this should be
+	 * a page listing links to all news (per language). The cache only needs to
+	 * be cleared for all pages linked to from those listing pages (e.g. the
+	 * caches should be cleared for the pages used as tt_news "single" views,
+	 * while the listing pages contain "list" views linking to those "single"
+	 * pages).
+	 *
+	 * @param array $cfg Configuration array
+	 * @param string $aliasValue Alias value to convert to ID
+	 * @param boolean $onlyNonExpired <code>true</code> if only non-expiring record should be looked up
+	 * @return mixed first result row from database if found
+	 * @see clearPageCacheMgm
+	 */
+	protected function lookup_uniqAliasToId_missResolution_fetchPagesAndRetry($cfg, $aliasValue, $onlyNonExpired = FALSE) {
+		// we cannot call pages if none have been configured
+		if (!is_array($cfg['useUniqueCache_conf']['cacheMissResolution']['strategy_conf']['urls'])) {
+			return false;
+		}
+
+		// for compatibility with both old (4.5) and new (6.2) TYPO3 versions
+		$hasGeneralUtility = class_exists('\TYPO3\CMS\Core\Utility\GeneralUtility');
+
+		// skip if we called ourselves
+		// otherwise we are likely to run into an infinite recursion
+		// the parameter will be automatically appended to all URLs before fetching
+		$recursionStopParameter = 'isCacheMissResolution';
+		$isRecursiveCall = $hasGeneralUtility ? \TYPO3\CMS\Core\Utility\GeneralUtility::_GP($recursionStopParameter) : t3lib_div::_GP($recursionStopParameter);
+		if ($isRecursiveCall) {
+			return false;
+		}
+
+		// clear RealURL caches
+		// unique cache will not be populated if encode cache can be used so
+		// we should clear all caches for the given pages
+		if (isset($cfg['useUniqueCache_conf']['cacheMissResolution']['strategy_conf']['clearPageCache'])) {
+			$this->clearPageCacheMgm($cfg['useUniqueCache_conf']['cacheMissResolution']['strategy_conf']['clearPageCache']);
+		}
+
+		// fetch all configured URLs to let them populate the unique cache
+		foreach ($cfg['useUniqueCache_conf']['cacheMissResolution']['strategy_conf']['urls'] as $url) {
+			// append parameter to stop recursion
+			$urlContainsQueryString = (strpos($url, '?') !== false);
+			$url .= ($urlContainsQueryString ? '&' : '?') . $recursionStopParameter . '=1';
+
+			// fetch page
+			if ($hasGeneralUtility) {
+				\TYPO3\CMS\Core\Utility\GeneralUtility::getURL($url);
+			} else {
+				t3lib_div::getURL($url);
+			}
+		}
+
+		// retry lookup
+		$row = $this->lookUp_uniqAliasToId_fetchRow($cfg, $aliasValue, $onlyNonExpired);
+
+		return $row;
 	}
 
 	/**
