@@ -34,6 +34,13 @@
  * @author	Dmitry Dulepov <dmitry@typo3.org>
  */
 
+if (version_compare(TYPO3_branch, '6.0', '<')) {
+	class tx_realurl_baseclass implements t3lib_Singleton {};
+}
+else {
+	class tx_realurl_baseclass implements \TYPO3\CMS\Core\SingletonInterface {};
+}
+
 /**
  * Class for creating and parsing Speaking Urls
  * This class interfaces with hooks in TYPO3 inside tslib_fe (for parsing speaking URLs to GET parameters) and in t3lib_tstemplate (for parsing GET parameters into a speaking URL)
@@ -43,7 +50,7 @@
  * @package TYPO3
  * @subpackage tx_realurl
  */
-class tx_realurl {
+class tx_realurl extends tx_realurl_baseclass {
 
 	// External, static
 	var $NA = '-'; // Substitute value for "blank" values
@@ -324,7 +331,7 @@ class tx_realurl {
 	 * This method gets called by the typoLink_PostProc hook in tslib_content:
 	 *
 	 * @param array $parameters Array of parameters from typoLink_PostProc hook in tslib_content
-	 * @param tslib_cObj $pObj Reference to the calling tslib_content instance
+	 * @param tslib_cObj|\TYPO3\CMS\Frontend\ContentObject\ContentObjectRenderer $pObj Reference to the calling tslib_content instance
 	 * @return void
 	 */
 	public function encodeSpURL_urlPrepend(&$parameters, &$pObj) {
